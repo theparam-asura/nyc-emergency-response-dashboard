@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NYC 911 Caller Prototype</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="caller-page">
+  <main class="caller-shell">
+    <section class="caller-panel">
+      <p class="eyebrow">NYC emergency response prototype</p>
+      <h1>Request Emergency Help</h1>
+      <p class="lede">This demo sends your live browser GPS location to a responder dashboard over WebSockets.</p>
+
+      <form id="emergencyForm" class="emergency-form">
+        <label>
+          Emergency type
+          <select id="emergencyType">
+            <option>Medical</option>
+            <option>Fire</option>
+            <option>Police</option>
+            <option>Traffic accident</option>
+            <option>Other</option>
+          </select>
+        </label>
+
+        <label>
+          Caller name
+          <input id="callerName" type="text" placeholder="Jane Doe" autocomplete="name">
+        </label>
+
+        <label>
+          Phone number
+          <input id="callerPhone" type="tel" placeholder="555-0134" autocomplete="tel">
+        </label>
+
+        <label>
+          Situation notes
+          <textarea id="notes" rows="4" placeholder="Describe what happened, visible injuries, landmarks, or safety risks."></textarea>
+        </label>
+
+        <button class="panic-button" type="submit">Send Help Request</button>
+      </form>
+
+      <div class="status-grid">
+        <article>
+          <span>Connection</span>
+          <strong id="connectionStatus">Connecting...</strong>
+        </article>
+        <article>
+          <span>Location</span>
+          <strong id="locationStatus">Waiting</strong>
+        </article>
+        <article>
+          <span>Coordinates</span>
+          <strong id="coordinates">Not shared</strong>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="js/caller.js"></script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+{
+  "name": "nyc-911-live-dashboard",
+  "version": "1.0.0",
+  "description": "College project prototype for a live emergency caller location dashboard using Express, Socket.IO, Leaflet, and browser geolocation.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": [
+    "911",
+    "dashboard",
+    "socket.io",
+    "geolocation",
+    "leaflet"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  }
+}

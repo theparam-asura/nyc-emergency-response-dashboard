@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NYC 911 Responder Dashboard</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="dashboard-page">
+  <aside class="sidebar">
+    <div>
+      <p class="eyebrow">Live operations</p>
+      <h1>Responder Dashboard</h1>
+    </div>
+
+    <div class="summary-strip">
+      <article>
+        <span>Active</span>
+        <strong id="activeCount">0</strong>
+      </article>
+      <article>
+        <span>Updated</span>
+        <strong id="lastUpdated">Never</strong>
+      </article>
+    </div>
+
+    <section>
+      <h2>Incoming incidents</h2>
+      <div id="incidentList" class="incident-list"></div>
+    </section>
+  </aside>
+
+  <main class="map-panel">
+    <div id="map"></div>
+    <section class="detail-bar">
+      <div>
+        <p class="eyebrow">Selected incident</p>
+        <h2 id="selectedTitle">No active caller selected</h2>
+      </div>
+      <div id="selectedDetails">Open the caller page, send a help request, and allow location access to see live tracking here.</div>
+    </section>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="js/dashboard.js"></script>
+</body>
+</html>
