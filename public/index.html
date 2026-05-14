@@ -43,6 +43,16 @@
         <button class="panic-button" type="submit">Send Help Request</button>
       </form>
 
+      <section class="voice-panel" id="voicePanel" hidden>
+        <div>
+          <p class="eyebrow">Voice transcript</p>
+          <h2>Caller Audio</h2>
+        </div>
+        <button class="secondary-button" id="voiceButton" type="button">Start Voice Transcript</button>
+        <p id="voiceStatus">Microphone waiting</p>
+        <div id="transcriptPreview" class="transcript-preview">No speech captured yet.</div>
+      </section>
+
       <div class="status-grid">
         <article>
           <span>Connection</span>
@@ -55,6 +65,10 @@
         <article>
           <span>Coordinates</span>
           <strong id="coordinates">Not shared</strong>
+        </article>
+        <article>
+          <span>Voice</span>
+          <strong id="voiceSummary">Waiting</strong>
         </article>
       </div>
     </section>

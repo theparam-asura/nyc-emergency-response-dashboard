@@ -10,6 +10,9 @@ This is a college-project prototype for an emergency response dashboard. It is n
 - Responder dashboard receives live incident updates.
 - Leaflet displays the caller location on an OpenStreetMap map.
 - Operators can mark an incident as resolved.
+- Caller speech can be converted into a live transcript in Chrome-based browsers.
+- The dashboard shows dispatch guidance from OpenAI when `OPENAI_API_KEY` is set, otherwise it uses a local rule-based fallback.
+- Nearby police stations, fire stations, and hospitals are searched from the caller's GPS location.
 
 ## Project Structure
 
@@ -55,6 +58,35 @@ http://localhost:3000
 ```text
 http://localhost:3000/dashboard
 ```
+
+## Optional OpenAI Setup
+
+The app works without an OpenAI key, but AI guidance becomes rule-based. To enable OpenAI-backed dispatch guidance, set an environment variable before starting:
+
+```powershell
+$env:OPENAI_API_KEY="your_api_key_here"
+npm start
+```
+
+You can also choose a model:
+
+```powershell
+$env:OPENAI_MODEL="gpt-4.1-mini"
+npm start
+```
+
+Do not commit API keys to GitHub.
+
+## Test Voice And Dispatch Guidance
+
+1. Open `http://localhost:3000/dashboard`.
+2. Open `http://localhost:3000`.
+3. Submit the emergency form.
+4. Allow location permission.
+5. Click `Start Voice Transcript`.
+6. Allow microphone permission.
+7. Speak a sample emergency description.
+8. Confirm the dashboard updates with transcript, guidance, location, and nearby facilities.
 
 ## Testing Location
 

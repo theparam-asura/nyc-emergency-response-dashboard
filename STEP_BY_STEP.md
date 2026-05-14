@@ -77,10 +77,15 @@ http://localhost:3000/dashboard
 4. Click `Send Help Request`.
 5. Allow location permission when the browser asks.
 6. Watch the dashboard update with the caller's live GPS coordinates.
+7. Click `Start Voice Transcript` on the caller page.
+8. Allow microphone permission.
+9. Speak a sample emergency sentence and watch the dashboard transcript and guidance update.
 
 ## 9. Important Project Note
 
 Describe this as an emergency response simulation or 911 dashboard prototype. It is not connected to NYC 911 services and should not be used for real emergencies.
+
+This prototype cannot track a real caller from a phone number. It uses browser permission-based location and microphone access.
 
 ## 10. Recommended Hosting
 

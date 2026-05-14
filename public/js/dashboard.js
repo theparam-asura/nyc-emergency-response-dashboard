@@ -4,12 +4,16 @@ const nycCenter = [40.7128, -74.006];
 const map = L.map("map", { zoomControl: false }).setView(nycCenter, 12);
 const incidents = new Map();
 const markers = new Map();
+const facilityMarkers = new Map();
 
 const incidentList = document.querySelector("#incidentList");
 const activeCount = document.querySelector("#activeCount");
 const lastUpdated = document.querySelector("#lastUpdated");
 const selectedTitle = document.querySelector("#selectedTitle");
 const selectedDetails = document.querySelector("#selectedDetails");
+const transcriptList = document.querySelector("#transcriptList");
+const guidancePanel = document.querySelector("#guidancePanel");
+const facilityList = document.querySelector("#facilityList");
 
 let selectedIncidentId = null;
 
@@ -41,6 +45,12 @@ socket.on("incident:removed", (id) => {
     marker.remove();
     markers.delete(id);
   }
+  for (const [markerId, facilityMarker] of facilityMarkers.entries()) {
+    if (markerId.startsWith(`${id}:`)) {
+      facilityMarker.remove();
+      facilityMarkers.delete(markerId);
+    }
+  }
   if (selectedIncidentId === id) selectedIncidentId = null;
   renderIncidents();
 });
@@ -65,6 +75,8 @@ function upsertIncident(incident) {
       map.setView(latLng, 16);
     }
   }
+
+  renderFacilityMarkers(incident);
 }
 
 function renderIncidents() {
@@ -115,6 +127,12 @@ function renderSelectedIncident() {
   if (!incident) {
     selectedTitle.textContent = "No active caller selected";
     selectedDetails.textContent = "Open the caller page, send a help request, and allow location access to see live tracking here.";
+    transcriptList.textContent = "No caller transcript yet.";
+    transcriptList.className = "transcript-list empty-state";
+    guidancePanel.textContent = "Waiting for incident details.";
+    guidancePanel.className = "guidance-panel empty-state";
+    facilityList.textContent = "Waiting for caller GPS.";
+    facilityList.className = "facility-list empty-state";
     return;
   }
 
@@ -130,6 +148,111 @@ function renderSelectedIncident() {
   selectedDetails.querySelector(".resolve-button").addEventListener("click", (event) => {
     socket.emit("incident:resolve", event.target.dataset.id);
   });
+
+  renderTranscript(incident);
+  renderGuidance(incident);
+  renderFacilities(incident);
+}
+
+function renderTranscript(incident) {
+  const transcript = incident.transcript || [];
+
+  if (!transcript.length) {
+    transcriptList.textContent = "No caller transcript yet.";
+    transcriptList.className = "transcript-list empty-state";
+    return;
+  }
+
+  transcriptList.className = "transcript-list";
+  transcriptList.innerHTML = transcript
+    .slice(-8)
+    .map((entry) => `
+      <article>
+        <span>${formatTime(entry.timestamp)}</span>
+        <p>${escapeHtml(entry.text)}</p>
+      </article>
+    `)
+    .join("");
+}
+
+function renderGuidance(incident) {
+  const guidance = incident.guidance;
+
+  if (!guidance) {
+    guidancePanel.textContent = "Waiting for incident details.";
+    guidancePanel.className = "guidance-panel empty-state";
+    return;
+  }
+
+  guidancePanel.className = "guidance-panel";
+  guidancePanel.innerHTML = `
+    <div class="priority-line">
+      <span>${escapeHtml(guidance.priority)}</span>
+      <strong>${escapeHtml(guidance.recommendedUnit)}</strong>
+    </div>
+    <p>${escapeHtml(guidance.summary)}</p>
+    ${renderMiniList("Questions", guidance.questions)}
+    ${renderMiniList("Actions", guidance.actions)}
+    ${renderMiniList("Risks", guidance.risks)}
+  `;
+}
+
+function renderFacilities(incident) {
+  const facilities = incident.facilities || [];
+
+  if (!facilities.length) {
+    facilityList.textContent = incident.location ? "Searching nearby places..." : "Waiting for caller GPS.";
+    facilityList.className = "facility-list empty-state";
+    return;
+  }
+
+  facilityList.className = "facility-list";
+  facilityList.innerHTML = facilities
+    .slice(0, 6)
+    .map((facility) => `
+      <article>
+        <strong>${escapeHtml(facility.name)}</strong>
+        <span>${escapeHtml(formatFacilityType(facility.type))} - ${formatDistance(facility.distanceMeters)}</span>
+      </article>
+    `)
+    .join("");
+}
+
+function renderFacilityMarkers(incident) {
+  for (const [id, marker] of facilityMarkers.entries()) {
+    if (id.startsWith(`${incident.id}:`)) {
+      marker.remove();
+      facilityMarkers.delete(id);
+    }
+  }
+
+  (incident.facilities || []).forEach((facility) => {
+    const markerId = `${incident.id}:${facility.id}`;
+    const marker = L.circleMarker([facility.lat, facility.lng], {
+      radius: 7,
+      color: getFacilityColor(facility.type),
+      fillColor: getFacilityColor(facility.type),
+      fillOpacity: 0.82,
+      weight: 2
+    })
+      .addTo(map)
+      .bindPopup(`${facility.name} (${formatFacilityType(facility.type)})`);
+
+    facilityMarkers.set(markerId, marker);
+  });
+}
+
+function renderMiniList(title, values = []) {
+  if (!values.length) return "";
+
+  return `
+    <div class="mini-list">
+      <strong>${title}</strong>
+      <ul>
+        ${values.slice(0, 4).map((value) => `<li>${escapeHtml(value)}</li>`).join("")}
+      </ul>
+    </div>
+  `;
 }
 
 function formatCoordinates(location) {
@@ -142,6 +265,24 @@ function formatTime(value) {
     minute: "2-digit",
     second: "2-digit"
   }).format(new Date(value));
+}
+
+function formatDistance(meters) {
+  return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${meters} m`;
+}
+
+function formatFacilityType(type) {
+  return String(type).replaceAll("_", " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getFacilityColor(type) {
+  const colors = {
+    hospital: "#1f7a4d",
+    police: "#1769aa",
+    fire_station: "#c62828"
+  };
+
+  return colors[type] || "#596579";
 }
 
 function escapeHtml(value) {
