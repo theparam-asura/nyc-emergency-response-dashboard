@@ -394,6 +394,39 @@ textarea {
   cursor: pointer;
 }
 
+.dispatch-summary {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  background: #fff;
+  font-weight: 750;
+}
+
+.dispatch-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  margin-right: 10px;
+}
+
+.dispatch-button {
+  min-height: 36px;
+  border: 1px solid var(--blue);
+  border-radius: 6px;
+  padding: 7px 12px;
+  color: var(--blue);
+  background: #fff;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.dispatch-button:hover {
+  background: #edf6ff;
+}
+
 @media (max-width: 860px) {
   .dashboard-page {
     grid-template-columns: 1fr;

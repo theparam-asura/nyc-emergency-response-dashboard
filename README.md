@@ -13,6 +13,7 @@ This is a college-project prototype for an emergency response dashboard. It is n
 - Caller speech can be converted into a live transcript in Chrome-based browsers.
 - The dashboard shows dispatch guidance from OpenAI when `OPENAI_API_KEY` is set, otherwise it uses a local rule-based fallback.
 - Nearby police stations, fire stations, and hospitals are searched from the caller's GPS location.
+- The dashboard can simulate dispatching EMS, fire, or police units and track their movement toward the caller.
 
 ## Project Structure
 
@@ -87,6 +88,8 @@ Do not commit API keys to GitHub.
 6. Allow microphone permission.
 7. Speak a sample emergency description.
 8. Confirm the dashboard updates with transcript, guidance, location, and nearby facilities.
+9. On the dashboard, click `Dispatch EMS`, `Dispatch Fire`, or `Dispatch Police`.
+10. Watch the simulated unit marker and route move toward the caller.
 
 ## Testing Location
 

@@ -5,6 +5,8 @@ const map = L.map("map", { zoomControl: false }).setView(nycCenter, 12);
 const incidents = new Map();
 const markers = new Map();
 const facilityMarkers = new Map();
+const dispatchMarkers = new Map();
+const dispatchRoutes = new Map();
 
 const incidentList = document.querySelector("#incidentList");
 const activeCount = document.querySelector("#activeCount");
@@ -51,6 +53,7 @@ socket.on("incident:removed", (id) => {
       facilityMarkers.delete(markerId);
     }
   }
+  removeDispatchLayers(id);
   if (selectedIncidentId === id) selectedIncidentId = null;
   renderIncidents();
 });
@@ -77,6 +80,7 @@ function upsertIncident(incident) {
   }
 
   renderFacilityMarkers(incident);
+  renderDispatchLayers(incident);
 }
 
 function renderIncidents() {
@@ -142,16 +146,55 @@ function renderSelectedIncident() {
     Status: ${escapeHtml(incident.status)} |
     GPS: ${incident.location ? formatCoordinates(incident.location) : "waiting"} |
     Notes: ${escapeHtml(incident.notes || "none")}
+    ${renderDispatchSummary(incident)}
+    ${renderDispatchButtons(incident)}
     <button class="resolve-button" type="button" data-id="${incident.id}">Mark Resolved</button>
   `;
 
   selectedDetails.querySelector(".resolve-button").addEventListener("click", (event) => {
     socket.emit("incident:resolve", event.target.dataset.id);
   });
+  selectedDetails.querySelectorAll(".dispatch-button").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      socket.emit("dispatch:start", {
+        id: incident.id,
+        unitType: event.target.dataset.unitType
+      });
+    });
+  });
 
   renderTranscript(incident);
   renderGuidance(incident);
   renderFacilities(incident);
+}
+
+function renderDispatchSummary(incident) {
+  if (!incident.dispatch) {
+    return `<div class="dispatch-summary">Dispatch: waiting for assignment</div>`;
+  }
+
+  return `
+    <div class="dispatch-summary">
+      Dispatch: ${escapeHtml(incident.dispatch.unitName)} ${escapeHtml(incident.dispatch.status)}
+      from ${escapeHtml(incident.dispatch.originName)}
+      - ETA ${incident.dispatch.etaMinutes} min
+      - ${formatDistance(incident.dispatch.remainingMeters)} remaining
+    </div>
+  `;
+}
+
+function renderDispatchButtons(incident) {
+  if (!incident.location) {
+    return `<div class="dispatch-actions">Waiting for GPS before dispatch.</div>`;
+  }
+
+  return `
+    <div class="dispatch-actions">
+      <button class="dispatch-button" type="button" data-unit-type="ems">Dispatch EMS</button>
+      <button class="dispatch-button" type="button" data-unit-type="fire">Dispatch Fire</button>
+      <button class="dispatch-button" type="button" data-unit-type="police">Dispatch Police</button>
+    </div>
+  `;
 }
 
 function renderTranscript(incident) {
@@ -242,6 +285,50 @@ function renderFacilityMarkers(incident) {
   });
 }
 
+function renderDispatchLayers(incident) {
+  removeDispatchLayers(incident.id);
+
+  if (!incident.dispatch?.location || !incident.dispatch?.destination) return;
+
+  const unitLocation = [incident.dispatch.location.lat, incident.dispatch.location.lng];
+  const destination = [incident.dispatch.destination.lat, incident.dispatch.destination.lng];
+  const color = getDispatchColor(incident.dispatch.unitType);
+
+  const marker = L.circleMarker(unitLocation, {
+    radius: 10,
+    color,
+    fillColor: color,
+    fillOpacity: 0.95,
+    weight: 3
+  })
+    .addTo(map)
+    .bindPopup(`${incident.dispatch.unitName}: ${incident.dispatch.status}`);
+
+  const route = L.polyline([unitLocation, destination], {
+    color,
+    weight: 4,
+    opacity: 0.8,
+    dashArray: incident.dispatch.status === "arrived" ? null : "8 8"
+  }).addTo(map);
+
+  dispatchMarkers.set(incident.id, marker);
+  dispatchRoutes.set(incident.id, route);
+}
+
+function removeDispatchLayers(id) {
+  const marker = dispatchMarkers.get(id);
+  if (marker) {
+    marker.remove();
+    dispatchMarkers.delete(id);
+  }
+
+  const route = dispatchRoutes.get(id);
+  if (route) {
+    route.remove();
+    dispatchRoutes.delete(id);
+  }
+}
+
 function renderMiniList(title, values = []) {
   if (!values.length) return "";
 
@@ -283,6 +370,16 @@ function getFacilityColor(type) {
   };
 
   return colors[type] || "#596579";
+}
+
+function getDispatchColor(unitType) {
+  const colors = {
+    ems: "#1f7a4d",
+    fire: "#c62828",
+    police: "#1769aa"
+  };
+
+  return colors[unitType] || "#596579";
 }
 
 function escapeHtml(value) {

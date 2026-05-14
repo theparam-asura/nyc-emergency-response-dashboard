@@ -9,6 +9,7 @@ const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
 const activeIncidents = new Map();
+const dispatchTimers = new Map();
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
@@ -40,7 +41,8 @@ io.on("connection", (socket) => {
       transcript: [],
       guidance: buildRuleBasedGuidance(incident.notes || "", incident.emergencyType || "Medical"),
       facilities: [],
-      facilitiesUpdatedAt: null
+      facilitiesUpdatedAt: null,
+      dispatch: null
     };
 
     activeIncidents.set(id, startedIncident);
@@ -96,6 +98,13 @@ io.on("connection", (socket) => {
     io.emit("incident:updated", updatedIncident);
   });
 
+  socket.on("dispatch:start", (payload) => {
+    const incident = activeIncidents.get(payload.id);
+    if (!incident?.location) return;
+
+    startSimulatedDispatch(payload.id, payload.unitType || getDefaultUnitType(incident));
+  });
+
   socket.on("incident:resolve", (id) => {
     const incident = activeIncidents.get(id);
     if (!incident) return;
@@ -110,6 +119,7 @@ io.on("connection", (socket) => {
     io.emit("incident:updated", resolvedIncident);
 
     setTimeout(() => {
+      stopDispatchTimer(id);
       activeIncidents.delete(id);
       io.emit("incident:removed", id);
     }, 5000);
@@ -323,4 +333,142 @@ function getDistanceMeters(lat1, lng1, lat2, lng2) {
     Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) *
     Math.sin(dLng / 2) ** 2;
   return Math.round(earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+
+function startSimulatedDispatch(id, unitType) {
+  stopDispatchTimer(id);
+
+  const incident = activeIncidents.get(id);
+  if (!incident?.location) return;
+
+  const start = chooseDispatchStart(incident, unitType);
+  const destination = {
+    lat: incident.location.lat,
+    lng: incident.location.lng
+  };
+  const totalDistanceMeters = getDistanceMeters(start.lat, start.lng, destination.lat, destination.lng);
+
+  const dispatch = {
+    id: `unit-${Date.now()}`,
+    unitType,
+    unitName: getUnitName(unitType),
+    status: "en route",
+    startedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    originName: start.name,
+    progress: 0,
+    totalDistanceMeters,
+    remainingMeters: totalDistanceMeters,
+    etaMinutes: Math.max(1, Math.ceil(totalDistanceMeters / 500)),
+    location: {
+      lat: start.lat,
+      lng: start.lng
+    },
+    destination
+  };
+
+  updateIncidentDispatch(id, dispatch);
+
+  const timer = setInterval(() => {
+    const latest = activeIncidents.get(id);
+    if (!latest?.dispatch || latest.status === "resolved") {
+      stopDispatchTimer(id);
+      return;
+    }
+
+    const nextProgress = Math.min(1, latest.dispatch.progress + 0.08);
+    const nextLocation = interpolateLocation(start, destination, nextProgress);
+    const remainingMeters = getDistanceMeters(nextLocation.lat, nextLocation.lng, destination.lat, destination.lng);
+    const nextDispatch = {
+      ...latest.dispatch,
+      status: nextProgress >= 1 ? "arrived" : "en route",
+      updatedAt: new Date().toISOString(),
+      progress: nextProgress,
+      remainingMeters,
+      etaMinutes: nextProgress >= 1 ? 0 : Math.max(1, Math.ceil(remainingMeters / 500)),
+      location: nextLocation
+    };
+
+    updateIncidentDispatch(id, nextDispatch);
+
+    if (nextProgress >= 1) {
+      stopDispatchTimer(id);
+    }
+  }, 2500);
+
+  dispatchTimers.set(id, timer);
+}
+
+function updateIncidentDispatch(id, dispatch) {
+  const incident = activeIncidents.get(id);
+  if (!incident) return;
+
+  const updatedIncident = {
+    ...incident,
+    dispatch,
+    updatedAt: new Date().toISOString()
+  };
+
+  activeIncidents.set(id, updatedIncident);
+  io.emit("incident:updated", updatedIncident);
+}
+
+function stopDispatchTimer(id) {
+  const timer = dispatchTimers.get(id);
+  if (timer) clearInterval(timer);
+  dispatchTimers.delete(id);
+}
+
+function chooseDispatchStart(incident, unitType) {
+  const preferredType = getFacilityTypeForUnit(unitType);
+  const facility = (incident.facilities || []).find((item) => item.type === preferredType)
+    || (incident.facilities || [])[0];
+
+  if (facility) {
+    return {
+      name: facility.name,
+      lat: facility.lat,
+      lng: facility.lng
+    };
+  }
+
+  return {
+    name: `${getUnitName(unitType)} staging point`,
+    lat: incident.location.lat + 0.012,
+    lng: incident.location.lng - 0.012
+  };
+}
+
+function getDefaultUnitType(incident) {
+  const type = incident.emergencyType.toLowerCase();
+  if (type.includes("fire")) return "fire";
+  if (type.includes("police")) return "police";
+  return "ems";
+}
+
+function getFacilityTypeForUnit(unitType) {
+  const types = {
+    ems: "hospital",
+    fire: "fire_station",
+    police: "police"
+  };
+
+  return types[unitType] || "hospital";
+}
+
+function getUnitName(unitType) {
+  const names = {
+    ems: "EMS Unit",
+    fire: "Fire Unit",
+    police: "Police Unit"
+  };
+
+  return names[unitType] || "Response Unit";
+}
+
+function interpolateLocation(start, end, progress) {
+  return {
+    lat: start.lat + (end.lat - start.lat) * progress,
+    lng: start.lng + (end.lng - start.lng) * progress
+  };
 }

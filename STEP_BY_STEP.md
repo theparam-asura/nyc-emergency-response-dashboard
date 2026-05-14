@@ -80,6 +80,8 @@ http://localhost:3000/dashboard
 7. Click `Start Voice Transcript` on the caller page.
 8. Allow microphone permission.
 9. Speak a sample emergency sentence and watch the dashboard transcript and guidance update.
+10. Click a dispatch button on the dashboard to simulate sending EMS, fire, or police.
+11. Watch the responder marker and ETA update on the map.
 
 ## 9. Important Project Note
 
