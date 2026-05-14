@@ -1,5 +1,5 @@
 {
-  "name": "nyc-911-live-dashboard",
+  "name": "nyc-emergency-response-dashboard",
   "version": "1.0.0",
   "description": "College project prototype for a live emergency caller location dashboard using Express, Socket.IO, Leaflet, and browser geolocation.",
   "main": "server.js",
