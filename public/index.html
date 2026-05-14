@@ -3,57 +3,51 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NYC 911 Caller Prototype</title>
+  <title>Emergency Caller Console</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body class="caller-page">
-  <main class="caller-shell">
-    <section class="caller-panel">
-      <p class="eyebrow">NYC emergency response prototype</p>
-      <h1>Request Emergency Help</h1>
-      <p class="lede">This demo sends your live browser GPS location to a responder dashboard over WebSockets.</p>
+  <main class="caller-layout">
+    <section class="caller-hero">
+      <p class="eyebrow">Emergency response prototype</p>
+      <h1>Request Help And Stay Connected</h1>
+      <p class="lede">Share live location, start a voice transcript, and receive dispatcher messages with spoken audio.</p>
+    </section>
 
+    <section class="caller-card">
       <form id="emergencyForm" class="emergency-form">
-        <label>
-          Emergency type
-          <select id="emergencyType">
-            <option>Medical</option>
-            <option>Fire</option>
-            <option>Police</option>
-            <option>Traffic accident</option>
-            <option>Other</option>
-          </select>
-        </label>
+        <div class="form-grid">
+          <label>
+            Emergency type
+            <select id="emergencyType">
+              <option>Medical</option>
+              <option>Fire</option>
+              <option>Police</option>
+              <option>Traffic accident</option>
+              <option>Other</option>
+            </select>
+          </label>
 
-        <label>
-          Caller name
-          <input id="callerName" type="text" placeholder="Jane Doe" autocomplete="name">
-        </label>
+          <label>
+            Caller name
+            <input id="callerName" type="text" placeholder="Jane Doe" autocomplete="name">
+          </label>
 
-        <label>
-          Phone number
-          <input id="callerPhone" type="tel" placeholder="555-0134" autocomplete="tel">
-        </label>
+          <label>
+            Phone number
+            <input id="callerPhone" type="tel" placeholder="555-0134" autocomplete="tel">
+          </label>
+        </div>
 
         <label>
           Situation notes
-          <textarea id="notes" rows="4" placeholder="Describe what happened, visible injuries, landmarks, or safety risks."></textarea>
+          <textarea id="notes" rows="3" placeholder="Describe what happened, visible injuries, landmarks, or safety risks."></textarea>
         </label>
 
-        <button class="panic-button" type="submit">Send Help Request</button>
+        <button class="panic-button" type="submit">Start Emergency Call</button>
       </form>
 
-      <section class="voice-panel" id="voicePanel" hidden>
-        <div>
-          <p class="eyebrow">Voice transcript</p>
-          <h2>Caller Audio</h2>
-        </div>
-        <button class="secondary-button" id="voiceButton" type="button">Start Voice Transcript</button>
-        <p id="voiceStatus">Microphone waiting</p>
-        <div id="transcriptPreview" class="transcript-preview">No speech captured yet.</div>
-      </section>
-
-      <div class="status-grid">
+      <div class="caller-status-board">
         <article>
           <span>Connection</span>
           <strong id="connectionStatus">Connecting...</strong>
@@ -63,14 +57,47 @@
           <strong id="locationStatus">Waiting</strong>
         </article>
         <article>
-          <span>Coordinates</span>
-          <strong id="coordinates">Not shared</strong>
+          <span>Dispatch</span>
+          <strong id="dispatchStatus">Not assigned</strong>
         </article>
         <article>
           <span>Voice</span>
           <strong id="voiceSummary">Waiting</strong>
         </article>
       </div>
+
+      <section class="call-room" id="callRoom" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Live call</p>
+            <h2>Two-Way Dispatcher Channel</h2>
+          </div>
+          <button class="secondary-button" id="voiceButton" type="button">Start Voice Transcript</button>
+        </div>
+
+        <div class="split-panel">
+          <article>
+            <h3>Dispatcher Messages</h3>
+            <div id="dispatcherMessages" class="message-feed">No dispatcher messages yet.</div>
+            <form id="callerMessageForm" class="message-form">
+              <input id="callerMessage" type="text" placeholder="Type a reply if speaking is not safe">
+              <button type="submit">Send</button>
+            </form>
+          </article>
+
+          <article>
+            <h3>Caller Transcript</h3>
+            <p id="voiceStatus">Microphone waiting</p>
+            <div id="transcriptPreview" class="transcript-preview">No speech captured yet.</div>
+          </article>
+        </div>
+
+        <section class="caller-dispatch-panel">
+          <h3>Response Status</h3>
+          <div id="callerDispatchDetails">A dispatcher has not assigned a unit yet.</div>
+          <div id="coordinates" class="coordinate-line">Coordinates not shared yet.</div>
+        </section>
+      </section>
     </section>
   </main>
 

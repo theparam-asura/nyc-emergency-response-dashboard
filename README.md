@@ -14,6 +14,9 @@ This is a college-project prototype for an emergency response dashboard. It is n
 - The dashboard shows dispatch guidance from OpenAI when `OPENAI_API_KEY` is set, otherwise it uses a local rule-based fallback.
 - Nearby police stations, fire stations, and hospitals are searched from the caller's GPS location.
 - The dashboard can simulate dispatching EMS, fire, or police units and track their movement toward the caller.
+- SQLite stores incident records, timeline events, transcripts, dispatcher messages, and dispatch updates.
+- The caller page includes a two-way call room where dispatcher messages appear as text and can be spoken aloud by the browser.
+- The dashboard includes a prototype login gate, priority scoring, timeline, call log, map layer toggles, and responder status controls.
 
 ## Project Structure
 
@@ -60,6 +63,18 @@ http://localhost:3000
 http://localhost:3000/dashboard
 ```
 
+Dashboard access code:
+
+```text
+dispatcher
+```
+
+SQLite data is saved here:
+
+```text
+data/emergency-dashboard.sqlite
+```
+
 ## Optional OpenAI Setup
 
 The app works without an OpenAI key, but AI guidance becomes rule-based. To enable OpenAI-backed dispatch guidance, set an environment variable before starting:
@@ -90,6 +105,10 @@ Do not commit API keys to GitHub.
 8. Confirm the dashboard updates with transcript, guidance, location, and nearby facilities.
 9. On the dashboard, click `Dispatch EMS`, `Dispatch Fire`, or `Dispatch Police`.
 10. Watch the simulated unit marker and route move toward the caller.
+11. Send a dispatcher message from the dashboard.
+12. Confirm the caller page displays the message and speaks it aloud when `Speak` is checked.
+13. Change responder status to `Arrived`, `Transporting`, or `Cleared`.
+14. Confirm the timeline and SQLite database retain the call data.
 
 ## Testing Location
 

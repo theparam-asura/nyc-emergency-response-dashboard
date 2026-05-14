@@ -82,12 +82,17 @@ http://localhost:3000/dashboard
 9. Speak a sample emergency sentence and watch the dashboard transcript and guidance update.
 10. Click a dispatch button on the dashboard to simulate sending EMS, fire, or police.
 11. Watch the responder marker and ETA update on the map.
+12. Use the dashboard message box to send a spoken/text message back to the victim.
+13. Change responder status as the simulated unit moves through the workflow.
+14. Check `data/emergency-dashboard.sqlite` to confirm call data is being saved.
 
 ## 9. Important Project Note
 
 Describe this as an emergency response simulation or 911 dashboard prototype. It is not connected to NYC 911 services and should not be used for real emergencies.
 
 This prototype cannot track a real caller from a phone number. It uses browser permission-based location and microphone access.
+
+The dashboard login is a prototype-only client-side access gate. It is useful for a college demo, but it is not production security.
 
 ## 10. Recommended Hosting
 
