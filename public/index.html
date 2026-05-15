@@ -4,104 +4,31 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Emergency Caller Console</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ["Inter", "ui-sans-serif", "system-ui"] },
+          boxShadow: { glass: "0 24px 80px rgba(15,23,42,.24)" }
+        }
+      }
+    };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;650;750;850;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body class="caller-page">
-  <main class="caller-layout">
-    <section class="caller-hero">
-      <p class="eyebrow">Emergency response prototype</p>
-      <h1>Request Help And Stay Connected</h1>
-      <p class="lede">Share live location, start a voice transcript, and receive dispatcher messages with spoken audio.</p>
-    </section>
+  <div id="callerRoot"></div>
 
-    <section class="caller-card">
-      <form id="emergencyForm" class="emergency-form">
-        <div class="form-grid">
-          <label>
-            Emergency type
-            <select id="emergencyType">
-              <option>Medical</option>
-              <option>Fire</option>
-              <option>Police</option>
-              <option>Traffic accident</option>
-              <option>Other</option>
-            </select>
-          </label>
-
-          <label>
-            Caller name
-            <input id="callerName" type="text" placeholder="Jane Doe" autocomplete="name">
-          </label>
-
-          <label>
-            Phone number
-            <input id="callerPhone" type="tel" placeholder="555-0134" autocomplete="tel">
-          </label>
-        </div>
-
-        <label>
-          Situation notes
-          <textarea id="notes" rows="3" placeholder="Describe what happened, visible injuries, landmarks, or safety risks."></textarea>
-        </label>
-
-        <button class="panic-button" type="submit">Start Emergency Call</button>
-      </form>
-
-      <div class="caller-status-board">
-        <article>
-          <span>Connection</span>
-          <strong id="connectionStatus">Connecting...</strong>
-        </article>
-        <article>
-          <span>Location</span>
-          <strong id="locationStatus">Waiting</strong>
-        </article>
-        <article>
-          <span>Dispatch</span>
-          <strong id="dispatchStatus">Not assigned</strong>
-        </article>
-        <article>
-          <span>Voice</span>
-          <strong id="voiceSummary">Waiting</strong>
-        </article>
-      </div>
-
-      <section class="call-room" id="callRoom" hidden>
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">Live call</p>
-            <h2>Two-Way Dispatcher Channel</h2>
-          </div>
-          <button class="secondary-button" id="voiceButton" type="button">Start Voice Transcript</button>
-        </div>
-
-        <div class="split-panel">
-          <article>
-            <h3>Dispatcher Messages</h3>
-            <div id="dispatcherMessages" class="message-feed">No dispatcher messages yet.</div>
-            <form id="callerMessageForm" class="message-form">
-              <input id="callerMessage" type="text" placeholder="Type a reply if speaking is not safe">
-              <button type="submit">Send</button>
-            </form>
-          </article>
-
-          <article>
-            <h3>Caller Transcript</h3>
-            <p id="voiceStatus">Microphone waiting</p>
-            <div id="transcriptPreview" class="transcript-preview">No speech captured yet.</div>
-          </article>
-        </div>
-
-        <section class="caller-dispatch-panel">
-          <h3>Response Status</h3>
-          <div id="callerDispatchDetails">A dispatcher has not assigned a unit yet.</div>
-          <div id="coordinates" class="coordinate-line">Coordinates not shared yet.</div>
-        </section>
-      </section>
-    </section>
-  </main>
-
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="/socket.io/socket.io.js"></script>
-  <script src="js/caller.js"></script>
+  <script type="text/babel" src="js/caller.js"></script>
 </body>
 </html>

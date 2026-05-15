@@ -4,114 +4,37 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Emergency Operations Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ["Inter", "ui-sans-serif", "system-ui"],
+            mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular"]
+          },
+          boxShadow: {
+            glass: "0 24px 80px rgba(15,23,42,.28)",
+            glow: "0 0 0 1px rgba(255,255,255,.22), 0 24px 80px rgba(59,130,246,.25)"
+          }
+        }
+      }
+    };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;650;750;850;900&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body class="dashboard-page">
-  <section class="login-gate" id="loginGate">
-    <form id="loginForm" class="login-card">
-      <p class="eyebrow">Dispatcher access</p>
-      <h1>Operations Console</h1>
-      <label>
-        Access code
-        <input id="accessCode" type="password" placeholder="dispatcher">
-      </label>
-      <button type="submit">Enter Dashboard</button>
-      <p class="muted">Prototype code: dispatcher</p>
-    </form>
-  </section>
+  <div id="dashboardRoot"></div>
 
-  <aside class="ops-sidebar">
-    <header>
-      <p class="eyebrow">Live operations</p>
-      <h1>Responder Dashboard</h1>
-    </header>
-
-    <div class="summary-strip">
-      <article>
-        <span>Active</span>
-        <strong id="activeCount">0</strong>
-      </article>
-      <article>
-        <span>Priority</span>
-        <strong id="highestPriority">None</strong>
-      </article>
-      <article>
-        <span>Updated</span>
-        <strong id="lastUpdated">Never</strong>
-      </article>
-    </div>
-
-    <section>
-      <h2>Incoming incidents</h2>
-      <div id="incidentList" class="incident-list"></div>
-    </section>
-
-    <section>
-      <h2>Map layers</h2>
-      <div class="layer-controls">
-        <label><input type="checkbox" data-layer="facilities" checked> Facilities</label>
-        <label><input type="checkbox" data-layer="dispatch" checked> Dispatch route</label>
-        <label><input type="checkbox" data-layer="accuracy" checked> GPS accuracy</label>
-      </div>
-    </section>
-  </aside>
-
-  <main class="ops-main">
-    <div id="map"></div>
-
-    <section class="ops-panel">
-      <div class="ops-panel-header">
-        <div>
-          <p class="eyebrow">Selected incident</p>
-          <h2 id="selectedTitle">No active caller selected</h2>
-        </div>
-        <div id="selectedBadges" class="selected-badges"></div>
-      </div>
-
-      <div id="selectedDetails" class="selected-details">Open the caller page, send a help request, and allow location access to see live tracking here.</div>
-
-      <div class="ops-grid">
-        <section>
-          <h3>Live transcript</h3>
-          <div id="transcriptList" class="transcript-list empty-state">No caller transcript yet.</div>
-        </section>
-
-        <section>
-          <h3>Dispatch guidance</h3>
-          <div id="guidancePanel" class="guidance-panel empty-state">Waiting for incident details.</div>
-        </section>
-
-        <section>
-          <h3>Two-way call</h3>
-          <div id="callLog" class="message-feed">No call messages yet.</div>
-          <form id="dispatcherMessageForm" class="message-form">
-            <input id="dispatcherMessage" type="text" placeholder="Message to victim">
-            <label class="speak-toggle"><input id="speakMessage" type="checkbox" checked> Speak</label>
-            <button type="submit">Send</button>
-          </form>
-        </section>
-
-        <section>
-          <h3>Timeline</h3>
-          <div id="timelineList" class="timeline-list empty-state">No timeline events yet.</div>
-        </section>
-
-        <section>
-          <h3>Nearby emergency places</h3>
-          <div id="facilityList" class="facility-list empty-state">Waiting for caller GPS.</div>
-        </section>
-
-        <section>
-          <h3>Responder status</h3>
-          <div id="dispatchPanel" class="dispatch-panel empty-state">No unit assigned yet.</div>
-        </section>
-      </div>
-    </section>
-  </main>
-
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="/socket.io/socket.io.js"></script>
-  <script src="js/dashboard.js"></script>
+  <script type="text/babel" src="js/dashboard.js"></script>
 </body>
 </html>

@@ -9,7 +9,11 @@ const {
   addTranscript,
   addCallMessage,
   addDispatchUpdate,
+  resetDemoData,
   loadActiveIncidents,
+  loadIncidentHistory,
+  loadIncidentReport,
+  loadOperationsStats,
   dbPath
 } = require("./db");
 
@@ -20,6 +24,7 @@ const io = new Server(server);
 const PORT = process.env.PORT || 3000;
 const activeIncidents = new Map();
 const dispatchTimers = new Map();
+const busyFacilities = new Map();
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
@@ -36,6 +41,86 @@ app.get("/api/incidents", (req, res) => {
   res.json(Array.from(activeIncidents.values()));
 });
 
+app.get("/api/incidents/history", async (req, res) => {
+  try {
+    res.json(await loadIncidentHistory(req.query.limit));
+  } catch (error) {
+    console.error("History load failed:", error);
+    res.status(500).json({ error: "Unable to load incident history" });
+  }
+});
+
+app.get("/api/incidents/:id/report", async (req, res) => {
+  try {
+    const report = await loadIncidentReport(req.params.id);
+    if (!report) {
+      res.status(404).json({ error: "Incident not found" });
+      return;
+    }
+    res.json(report);
+  } catch (error) {
+    console.error("Report load failed:", error);
+    res.status(500).json({ error: "Unable to load incident report" });
+  }
+});
+
+app.get("/api/operations/stats", async (req, res) => {
+  try {
+    res.json(await loadOperationsStats());
+  } catch (error) {
+    console.error("Stats load failed:", error);
+    res.status(500).json({ error: "Unable to load operations stats" });
+  }
+});
+
+app.post("/api/demo/reset", async (req, res) => {
+  try {
+    activeIncidents.clear();
+    dispatchTimers.forEach((timer) => clearInterval(timer));
+    dispatchTimers.clear();
+    busyFacilities.clear();
+    await resetDemoData();
+    io.emit("incidents:snapshot", []);
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("Demo reset failed:", error);
+    res.status(500).json({ error: "Unable to reset demo data" });
+  }
+});
+
+app.post("/api/demo/seed", async (req, res) => {
+  try {
+    const seeded = [];
+    for (const scenario of getSeedScenarios()) {
+      const incident = await createScenarioIncident(scenario, `seed-${Date.now()}-${seeded.length}`);
+      seeded.push(incident);
+    }
+    res.json({ ok: true, count: seeded.length, incidents: seeded });
+  } catch (error) {
+    console.error("Demo seed failed:", error);
+    res.status(500).json({ error: "Unable to seed demo incidents" });
+  }
+});
+
+app.post("/api/incidents/:id/reopen", async (req, res) => {
+  const incident = activeIncidents.get(req.params.id) || await loadIncidentReport(req.params.id);
+  if (!incident) {
+    res.status(404).json({ error: "Incident not found" });
+    return;
+  }
+  const reopened = {
+    ...incident,
+    status: "accepted",
+    resolvedAt: null,
+    updatedAt: new Date().toISOString()
+  };
+  addTimeline(reopened, "incident_reopened", "Incident reopened by operator");
+  activeIncidents.set(reopened.id, reopened);
+  await persistIncident(reopened);
+  io.emit("incident:updated", reopened);
+  res.json(reopened);
+});
+
 io.on("connection", (socket) => {
   socket.emit("incidents:snapshot", Array.from(activeIncidents.values()));
 
@@ -43,6 +128,7 @@ io.on("connection", (socket) => {
     const id = incident.id || socket.id;
     const now = new Date().toISOString();
     const notes = incident.notes || "";
+    const landmark = String(incident.landmark || "").slice(0, 220);
     const emergencyType = detectEmergencyType(`${incident.emergencyType || ""} ${notes}`);
     const priority = calculatePriority(`${emergencyType} ${notes}`);
     const startedIncident = {
@@ -54,6 +140,8 @@ io.on("connection", (socket) => {
       callerName: incident.callerName || "Unknown caller",
       callerPhone: incident.callerPhone || "Not provided",
       notes,
+      callerLandmark: landmark,
+      verifiedLocation: landmark,
       createdAt: now,
       updatedAt: now,
       resolvedAt: null,
@@ -64,14 +152,123 @@ io.on("connection", (socket) => {
       guidance: buildRuleBasedGuidance(notes, emergencyType),
       facilities: [],
       facilitiesUpdatedAt: null,
-      dispatch: null
+      dispatch: null,
+      dispatches: []
     };
 
-    addTimeline(startedIncident, "call_started", "Emergency request received", { emergencyType, priority });
+    addTimeline(startedIncident, "call_started", "Emergency request received", { emergencyType, priority, landmark });
     activeIncidents.set(id, startedIncident);
     socket.join(id);
+    socket.join(`call:${id}`);
     await persistIncident(startedIncident);
     io.emit("incident:created", startedIncident);
+  });
+
+  socket.on("scenario:create", async () => {
+    const scenarios = getSeedScenarios();
+    const scenario = scenarios[Math.floor(Math.random() * scenarios.length)];
+    await createScenarioIncident(scenario, `scenario-${Date.now()}`);
+  });
+
+  socket.on("dispatcher:join", (id) => {
+    if (!activeIncidents.has(id)) return;
+    socket.join(id);
+  });
+
+  socket.on("incident:accept", async (payload) => {
+    const id = typeof payload === "string" ? payload : payload?.id;
+    const incident = activeIncidents.get(id);
+    if (!incident) return;
+
+    const acceptedIncident = {
+      ...incident,
+      status: "accepted",
+      assignedOperator: payload?.operator || "Dashboard operator",
+      updatedAt: new Date().toISOString()
+    };
+
+    addTimeline(acceptedIncident, "incident_accepted", `${acceptedIncident.assignedOperator} accepted the request`);
+    activeIncidents.set(id, acceptedIncident);
+    await persistIncident(acceptedIncident);
+    io.emit("incident:updated", acceptedIncident);
+  });
+
+  socket.on("incident:update-details", async (payload) => {
+    const incident = activeIncidents.get(payload.id);
+    if (!incident) return;
+
+    const notes = String(payload.notes ?? incident.notes ?? "").slice(0, 1000);
+    const emergencyType = detectEmergencyType(`${payload.emergencyType || incident.emergencyType} ${notes}`);
+    const priority = payload.priority || calculatePriority(`${emergencyType} ${notes}`);
+    const updatedIncident = {
+      ...incident,
+      callerName: String(payload.callerName || incident.callerName || "Unknown caller").slice(0, 120),
+      callerPhone: String(payload.callerPhone || incident.callerPhone || "Not provided").slice(0, 80),
+      emergencyType,
+      priority,
+      notes,
+      operatorNotes: String(payload.operatorNotes || incident.operatorNotes || "").slice(0, 1000),
+      verifiedLocation: String(payload.verifiedLocation || incident.verifiedLocation || "").slice(0, 220),
+      updatedAt: new Date().toISOString(),
+      guidance: buildRuleBasedGuidance(notes, emergencyType)
+    };
+
+    addTimeline(updatedIncident, "details_updated", "Dashboard operator updated request details", {
+      emergencyType,
+      priority,
+      verifiedLocation: updatedIncident.verifiedLocation
+    });
+    activeIncidents.set(payload.id, updatedIncident);
+    await persistIncident(updatedIncident);
+    io.emit("incident:updated", updatedIncident);
+  });
+
+  socket.on("call:join", async (payload) => {
+    const incident = activeIncidents.get(payload.id);
+    if (!incident) return;
+
+    socket.join(`call:${payload.id}`);
+    socket.to(`call:${payload.id}`).emit("call:peer-ready", {
+      id: payload.id,
+      role: payload.role || "operator"
+    });
+    socket.emit("call:joined", { id: payload.id });
+    if (payload.role === "caller") {
+      socket.emit("call:peer-ready", { id: payload.id, role: "dispatcher" });
+    }
+
+    addTimeline(incident, "call_connected", `${payload.role || "operator"} joined the live audio room`);
+    await persistIncident(incident);
+    io.emit("incident:updated", incident);
+  });
+
+  socket.on("call:request-offer", (payload) => {
+    if (!payload.id) return;
+    socket.to(`call:${payload.id}`).emit("call:request-offer", {
+      id: payload.id,
+      role: payload.role || "dispatcher"
+    });
+  });
+
+  socket.on("call:signal", (payload) => {
+    if (!payload.id || !payload.signal) return;
+    socket.to(`call:${payload.id}`).emit("call:signal", {
+      id: payload.id,
+      signal: payload.signal
+    });
+  });
+
+  socket.on("call:end", async (payload) => {
+    const incident = activeIncidents.get(payload.id);
+    if (incident) {
+      addTimeline(incident, "call_ended", `${payload.role || "participant"} left the live audio room`);
+      await persistIncident(incident);
+      io.emit("incident:updated", incident);
+    }
+    socket.to(`call:${payload.id}`).emit("call:ended", {
+      id: payload.id,
+      role: payload.role || "participant"
+    });
   });
 
   socket.on("caller:location", async (payload) => {
@@ -162,6 +359,21 @@ io.on("connection", (socket) => {
     io.emit("incident:updated", updatedIncident);
   });
 
+  socket.on("operator:log", async (payload) => {
+    const incident = activeIncidents.get(payload.id);
+    if (!incident || !payload.message) return;
+
+    const updatedIncident = {
+      ...incident,
+      updatedAt: new Date().toISOString()
+    };
+
+    addTimeline(updatedIncident, "operator_log", String(payload.message).slice(0, 220));
+    activeIncidents.set(payload.id, updatedIncident);
+    await persistIncident(updatedIncident);
+    io.emit("incident:updated", updatedIncident);
+  });
+
   socket.on("caller:message", async (payload) => {
     const incident = activeIncidents.get(payload.id);
     if (!incident || !payload.text) return;
@@ -185,18 +397,44 @@ io.on("connection", (socket) => {
     io.emit("incident:updated", updatedIncident);
   });
 
+  socket.on("caller:landmark", async (payload) => {
+    const incident = activeIncidents.get(payload.id);
+    if (!incident || !payload.landmark) return;
+    const landmark = String(payload.landmark).slice(0, 220);
+    const updatedIncident = {
+      ...incident,
+      callerLandmark: landmark,
+      verifiedLocation: incident.verifiedLocation || landmark,
+      updatedAt: new Date().toISOString()
+    };
+    addTimeline(updatedIncident, "caller_landmark", "Caller shared a nearby landmark", { landmark });
+    activeIncidents.set(payload.id, updatedIncident);
+    await persistIncident(updatedIncident);
+    io.emit("incident:updated", updatedIncident);
+  });
+
   socket.on("dispatch:start", async (payload) => {
     const incident = activeIncidents.get(payload.id);
     if (!incident?.location) return;
-    await startSimulatedDispatch(payload.id, payload.unitType || getDefaultUnitType(incident));
+    const result = await startSimulatedDispatch(payload.id, payload.unitType || getDefaultUnitType(incident), payload.origin || null);
+    if (!result?.ok) {
+      socket.emit("dispatch:error", {
+        id: payload.id,
+        message: result?.message || "Selected station is not available."
+      });
+    }
   });
 
   socket.on("dispatch:status", async (payload) => {
     const incident = activeIncidents.get(payload.id);
-    if (!incident?.dispatch || !payload.status) return;
+    if ((!incident?.dispatch && !incident?.dispatches?.length) || !payload.status) return;
 
+    const currentDispatch = payload.dispatchId
+      ? (incident.dispatches || []).find((item) => item.id === payload.dispatchId)
+      : incident.dispatch;
+    if (!currentDispatch) return;
     const dispatch = {
-      ...incident.dispatch,
+      ...currentDispatch,
       status: String(payload.status).slice(0, 40),
       updatedAt: new Date().toISOString()
     };
@@ -215,6 +453,7 @@ io.on("connection", (socket) => {
     };
 
     addTimeline(resolvedIncident, "incident_resolved", "Incident marked resolved");
+    releaseIncidentFacility(id);
     activeIncidents.set(id, resolvedIncident);
     await persistIncident(resolvedIncident);
     io.emit("incident:updated", resolvedIncident);
@@ -228,7 +467,7 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", async () => {
     for (const [id, incident] of activeIncidents.entries()) {
-      if (incident.callerSocketId === socket.id && incident.status === "active") {
+      if (incident.callerSocketId === socket.id && ["active", "accepted"].includes(incident.status)) {
         const disconnectedIncident = {
           ...incident,
           status: "connection lost",
@@ -248,7 +487,14 @@ startServer();
 async function startServer() {
   await initDb();
   const restoredIncidents = await loadActiveIncidents();
-  restoredIncidents.forEach((incident) => activeIncidents.set(incident.id, incident));
+  restoredIncidents.forEach((incident) => {
+    activeIncidents.set(incident.id, incident);
+    (incident.dispatches || [incident.dispatch]).filter(Boolean).forEach((dispatch) => {
+      if (dispatch.originFacilityId && !["Arrived", "Cleared"].includes(dispatch.status)) {
+        busyFacilities.set(dispatch.originFacilityId, incident.id);
+      }
+    });
+  });
 
   server.listen(PORT, () => {
     console.log(`NYC emergency dashboard running at http://localhost:${PORT}`);
@@ -295,10 +541,96 @@ async function maybeUpdateNearbyFacilities(id, incident) {
   io.emit("incident:updated", updatedIncident);
 }
 
+function getSeedScenarios() {
+  return [
+    {
+      emergencyType: "Police",
+      callerName: "Avery Morgan",
+      callerPhone: "(626) 320-0230",
+      notes: "Caller reports a domestic dispute and is locked in a bathroom. Possible weapon mentioned.",
+      landmark: "Apartment block lobby near the north gate",
+      location: { lat: 40.7549, lng: -73.984, accuracy: 34 }
+    },
+    {
+      emergencyType: "Fire",
+      callerName: "Riley Chen",
+      callerPhone: "(212) 555-0147",
+      notes: "Smoke filling apartment hallway. Caller can see flames near stairwell.",
+      landmark: "Third floor stairwell, east side",
+      location: { lat: 40.7306, lng: -73.9866, accuracy: 28 }
+    },
+    {
+      emergencyType: "Traffic accident",
+      callerName: "Jordan Lee",
+      callerPhone: "(917) 555-0192",
+      notes: "Two-car crash with one person bleeding and trapped near intersection.",
+      landmark: "Near the traffic signal by the market",
+      location: { lat: 40.7061, lng: -74.0086, accuracy: 42 }
+    },
+    {
+      emergencyType: "Medical",
+      callerName: "Param Rajput",
+      callerPhone: "+91 9302927686",
+      notes: "Caller reports chest pain and dizziness near a residential lane.",
+      landmark: "Beside the main road shop row",
+      location: { lat: 23.18586, lng: 77.45762, accuracy: 80 }
+    }
+  ];
+}
+
+async function createScenarioIncident(scenario, id) {
+  const now = new Date().toISOString();
+  const emergencyType = detectEmergencyType(`${scenario.emergencyType} ${scenario.notes}`);
+  const priority = calculatePriority(`${emergencyType} ${scenario.notes}`);
+  const incident = {
+    id,
+    callerSocketId: null,
+    status: "active",
+    priority,
+    emergencyType,
+    callerName: scenario.callerName,
+    callerPhone: scenario.callerPhone,
+    notes: scenario.notes,
+    callerLandmark: scenario.landmark || "",
+    verifiedLocation: scenario.landmark || "",
+    createdAt: now,
+    updatedAt: now,
+    resolvedAt: null,
+    location: {
+      ...scenario.location,
+      speed: null,
+      heading: null,
+      timestamp: now
+    },
+    transcript: [{
+      speaker: "caller",
+      text: scenario.notes,
+      isFinal: true,
+      timestamp: now
+    }],
+    messages: [],
+    timeline: [],
+    guidance: buildRuleBasedGuidance(scenario.notes, emergencyType),
+    facilities: [],
+    facilitiesUpdatedAt: null,
+    dispatch: null,
+    dispatches: []
+  };
+
+  addTimeline(incident, "scenario_created", "Demo incident generated by operator", { emergencyType, priority });
+  addTimeline(incident, "gps_received", "Caller GPS location received", incident.location);
+  activeIncidents.set(id, incident);
+  await addTranscript(id, "caller", scenario.notes, true);
+  await persistIncident(incident);
+  io.emit("incident:created", incident);
+  maybeUpdateNearbyFacilities(id, incident);
+  return incident;
+}
+
 async function findNearbyFacilities(lat, lng) {
-  const radiusMeters = 3000;
+  const radiusMeters = 25000;
   const query = `
-    [out:json][timeout:10];
+    [out:json][timeout:18];
     (
       node["amenity"="police"](around:${radiusMeters},${lat},${lng});
       way["amenity"="police"](around:${radiusMeters},${lat},${lng});
@@ -336,12 +668,15 @@ async function findNearbyFacilities(lat, lng) {
           type,
           lat: placeLat,
           lng: placeLng,
-          distanceMeters: getDistanceMeters(lat, lng, placeLat, placeLng)
+          distanceMeters: getDistanceMeters(lat, lng, placeLat, placeLng),
+          etaMinutes: estimateEtaMinutes(getDistanceMeters(lat, lng, placeLat, placeLng)),
+          available: !busyFacilities.has(`${place.type}-${place.id}`),
+          assignedIncidentId: busyFacilities.get(`${place.type}-${place.id}`) || null
         };
       })
       .filter(Boolean)
       .sort((a, b) => a.distanceMeters - b.distanceMeters)
-      .slice(0, 10);
+      .slice(0, 60);
   } catch (error) {
     console.warn("Nearby facility lookup failed:", error.message);
     return [];
@@ -496,28 +831,33 @@ function getDistanceMeters(lat1, lng1, lat2, lng2) {
   return Math.round(earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
-async function startSimulatedDispatch(id, unitType) {
-  stopDispatchTimer(id);
-
+async function startSimulatedDispatch(id, unitType, origin = null) {
   const incident = activeIncidents.get(id);
-  if (!incident?.location) return;
+  if (!incident?.location) return { ok: false, message: "Caller GPS is required before dispatch." };
 
-  const start = chooseDispatchStart(incident, unitType);
+  if (origin?.facilityId && busyFacilities.has(origin.facilityId) && busyFacilities.get(origin.facilityId) !== id) {
+    return { ok: false, message: `${origin.name || "Selected station"} is already assigned to another incident.` };
+  }
+
+  const start = chooseDispatchStart(incident, unitType, origin);
+  if (start.facilityId) busyFacilities.set(start.facilityId, id);
   const destination = { lat: incident.location.lat, lng: incident.location.lng };
   const totalDistanceMeters = getDistanceMeters(start.lat, start.lng, destination.lat, destination.lng);
 
   const dispatch = {
-    id: `unit-${Date.now()}`,
+    id: `${id}:unit-${Date.now()}-${unitType}`,
     unitType,
     unitName: getUnitName(unitType),
     status: "Assigned",
     startedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     originName: start.name,
+    originFacilityId: start.facilityId || null,
+    stationAvailable: false,
     progress: 0,
     totalDistanceMeters,
     remainingMeters: totalDistanceMeters,
-    etaMinutes: Math.max(1, Math.ceil(totalDistanceMeters / 500)),
+    etaMinutes: estimateEtaMinutes(totalDistanceMeters),
     location: { lat: start.lat, lng: start.lng },
     destination
   };
@@ -526,17 +866,18 @@ async function startSimulatedDispatch(id, unitType) {
 
   const timer = setInterval(async () => {
     const latest = activeIncidents.get(id);
-    if (!latest?.dispatch || latest.status === "resolved") {
-      stopDispatchTimer(id);
+    const latestDispatch = (latest?.dispatches || []).find((item) => item.id === dispatch.id) || latest?.dispatch;
+    if (!latestDispatch || latest.status === "resolved") {
+      stopDispatchTimer(dispatch.id);
       return;
     }
 
-    const nextProgress = Math.min(1, latest.dispatch.progress + 0.08);
+    const nextProgress = Math.min(1, latestDispatch.progress + 0.08);
     const nextLocation = interpolateLocation(start, destination, nextProgress);
     const remainingMeters = getDistanceMeters(nextLocation.lat, nextLocation.lng, destination.lat, destination.lng);
-    const status = nextProgress >= 1 ? "Arrived" : latest.dispatch.status === "Assigned" ? "En route" : latest.dispatch.status;
+    const status = nextProgress >= 1 ? "Arrived" : latestDispatch.status === "Assigned" ? "En route" : latestDispatch.status;
     const nextDispatch = {
-      ...latest.dispatch,
+      ...latestDispatch,
       status,
       updatedAt: new Date().toISOString(),
       progress: nextProgress,
@@ -546,19 +887,26 @@ async function startSimulatedDispatch(id, unitType) {
     };
 
     await updateIncidentDispatch(id, nextDispatch, `${nextDispatch.unitName} ${status.toLowerCase()}`);
-    if (nextProgress >= 1) stopDispatchTimer(id);
+    if (nextProgress >= 1) stopDispatchTimer(dispatch.id);
   }, 2500);
 
-  dispatchTimers.set(id, timer);
+  dispatchTimers.set(dispatch.id, timer);
+  return { ok: true, dispatch };
 }
 
 async function updateIncidentDispatch(id, dispatch, eventMessage = "Dispatch updated") {
   const incident = activeIncidents.get(id);
   if (!incident) return;
+  if (["Cleared", "Cancelled"].includes(dispatch.status) && dispatch.originFacilityId) {
+    busyFacilities.delete(dispatch.originFacilityId);
+  }
 
   const updatedIncident = {
     ...incident,
     dispatch,
+    status: incident.status === "active" ? "accepted" : incident.status,
+    dispatches: upsertDispatch(incident.dispatches || [], dispatch),
+    facilities: markFacilityAvailability(incident.facilities || []),
     updatedAt: new Date().toISOString()
   };
 
@@ -569,19 +917,52 @@ async function updateIncidentDispatch(id, dispatch, eventMessage = "Dispatch upd
   io.emit("incident:updated", updatedIncident);
 }
 
-function stopDispatchTimer(id) {
-  const timer = dispatchTimers.get(id);
-  if (timer) clearInterval(timer);
-  dispatchTimers.delete(id);
+function upsertDispatch(dispatches, dispatch) {
+  return dispatches.some((item) => item.id === dispatch.id)
+    ? dispatches.map((item) => item.id === dispatch.id ? dispatch : item)
+    : [...dispatches, dispatch];
 }
 
-function chooseDispatchStart(incident, unitType) {
+function markFacilityAvailability(facilities = []) {
+  return facilities.map((facility) => ({
+    ...facility,
+    available: !busyFacilities.has(facility.id),
+    assignedIncidentId: busyFacilities.get(facility.id) || null
+  }));
+}
+
+function stopDispatchTimer(id) {
+  for (const [timerId, timer] of dispatchTimers.entries()) {
+    if (timerId === id || timerId.startsWith(`${id}:`) || timerId.includes(id)) {
+      clearInterval(timer);
+      dispatchTimers.delete(timerId);
+    }
+  }
+}
+
+function releaseIncidentFacility(incidentId) {
+  for (const [facilityId, assignedIncidentId] of busyFacilities.entries()) {
+    if (assignedIncidentId === incidentId) busyFacilities.delete(facilityId);
+  }
+}
+
+function chooseDispatchStart(incident, unitType, origin = null) {
+  if (origin?.lat && origin?.lng) {
+    return {
+      name: String(origin.name || `${getUnitName(unitType)} station`).slice(0, 120),
+      facilityId: origin.facilityId || null,
+      lat: Number(origin.lat),
+      lng: Number(origin.lng)
+    };
+  }
+
   const preferredType = getFacilityTypeForUnit(unitType);
   const facility = (incident.facilities || []).find((item) => item.type === preferredType)
     || (incident.facilities || [])[0];
-  if (facility) return { name: facility.name, lat: facility.lat, lng: facility.lng };
+  if (facility) return { name: facility.name, facilityId: facility.id, lat: facility.lat, lng: facility.lng };
   return {
     name: `${getUnitName(unitType)} staging point`,
+    facilityId: null,
     lat: incident.location.lat + 0.012,
     lng: incident.location.lng - 0.012
   };
@@ -600,6 +981,10 @@ function getFacilityTypeForUnit(unitType) {
 
 function getUnitName(unitType) {
   return { ems: "EMS Unit", fire: "Fire Unit", police: "Police Unit" }[unitType] || "Response Unit";
+}
+
+function estimateEtaMinutes(meters = 0) {
+  return Math.max(2, Math.ceil((meters || 0) / 430));
 }
 
 function interpolateLocation(start, end, progress) {
